@@ -3,8 +3,8 @@ import time
 import cv2
 import mediapipe as mp
 
-from Project.calculate_angles3 import calculate_angle, calculate_trunk_lean, get_text_color,evaluate_angle, count_conditions, get_point, evaluate_each_body
-from Project.running_phase2 import RunningGaitCycleCounter
+from calculate_angles3 import calculate_angle, calculate_trunk_lean, get_text_color,evaluate_angle, count_conditions, get_point, evaluate_each_body
+from running_phase2 import RunningGaitCycleCounter
 
 
 def process_video(video_path):
@@ -12,17 +12,19 @@ def process_video(video_path):
     pose = mp_pose.Pose(static_image_mode=False, min_detection_confidence=0.5, min_tracking_confidence=0.5)
 
     cap = cv2.VideoCapture(video_path)
-    csv_filename = 'count2.csv'
+    csv_filename = 'count3.csv'
     fieldnames = ['Frame', 'Running Gait Cycle', 'Sub Phase', '% Cycle', 'Trunk Lean', 'Front Knee Angle', 'Back Knee Angle',
                   'Front Hip Angle', 'Angle Each Body %', 'Result']
     fieldnames_summary = [
-        'cycleCount', 'trunkLeanValue', 'trunkLeanPercentage', 'trunkLeanRes',
+        'cycleCount', 'totalFrames',
+        'trunkLeanValue', 'trunkLeanPercentage', 'trunkLeanRes',
         'frontKneeValue', 'frontKneePercentage', 'frontKneeRes',
         'backKneeValue', 'backKneePercentage', 'backKneeRes',
         'hipValue', 'hipPercentage', 'hipRes',
         'angleScore', 'angleRes',
-        'GoodScore', 'GoodPercentage', 'SatisfactoryScore', 'SatisfactoryPercentage',
-        'Should ImproveScore', 'Should ImprovePercentage'
+        'GoodScore', 'GoodPercentage',
+        'SatisfactoryScore', 'SatisfactoryPercentage',
+        'Should_ImproveScore', 'Should_ImprovePercentage'
     ]
     gait_counter = RunningGaitCycleCounter()
 
@@ -38,6 +40,9 @@ def process_video(video_path):
     total_good = 0
     total_satisfactory = 0
     total_should_improve = 0
+
+    detailed_data = []  # To store detailed frame-by-frame data
+    summary_data = {}  # To store summary data
 
     with open(csv_filename, mode='w', newline='') as csv_file:
         writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
@@ -88,14 +93,15 @@ def process_video(video_path):
                 point_righthip = get_point(right_angle_hip, hip_optimal)
 
                 knee_optimal_map = {
-                    ("Initial Contact", "Initial Contact"): (0, 35),
-                    ("Midstance", "Midstance"): (10, 45),
-                    ("Terminal Stance", "Terminal Stance"): (40, 75),
-                    ("Preswing", "Preswing"): (30, 65),
-                    ("Initial Swing", "Initial Swing"): (60, 95),
-                    ("Midswing", "Midswing"): (25, 60),
-                    ("Terminal Swing", "Terminal Swing"): (100, 135)
+                    ("Initial Contact", "Initial Contact"): (0, 40),
+                    ("Midstance", "Midstance"): (5, 45),
+                    ("Terminal Stance", "Terminal Stance"): (35, 75),
+                    ("Preswing", "Preswing"): (25, 65),
+                    ("Initial Swing", "Initial Swing"): (55, 95),
+                    ("Midswing", "Midswing"): (25, 65),
+                    ("Terminal Swing", "Terminal Swing"): (95, 135)
                 }
+
                 rknee_optimal = knee_optimal_map.get((right_subphase, right_subphase), (0, 0))
                 lknee_optimal = knee_optimal_map.get((left_subphase, left_subphase), (0, 0))
                 res_rightknee = evaluate_angle(right_angle_knee, rknee_optimal)
@@ -143,8 +149,6 @@ def process_video(video_path):
                 total_front_hip_angle += point_righthip
                 total_angle_each_body += AngleEach
 
-
-
             cv2.putText(image, f'Trunk Lean: {trunk_lean:.2f} ', (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.7,
                         get_text_color(trunk_lean, trunk_optimal), 2, cv2.LINE_AA)
             cv2.putText(image, f'Front Knee Angle: {right_angle_knee:.2f} ', (50, 70),
@@ -161,10 +165,7 @@ def process_video(video_path):
                         (255, 255, 255), 2, cv2.LINE_AA)
 
             mp.solutions.drawing_utils.draw_landmarks(image, results.pose_landmarks, mp_pose.POSE_CONNECTIONS)
-            cv2.imshow('Running Analysis', image)
-            time.sleep(0.05)
-            if cv2.waitKey(1) & 0xFF == ord('q'):
-                break
+
 
     cap.release()
     cv2.destroyAllWindows()
@@ -178,7 +179,7 @@ def process_video(video_path):
         avg_angle_each_body = total_angle_each_body / total_frames
 
         sum_acc = ((total_good + total_satisfactory) - total_should_improve)
-        avg_good = total_good/ total_frames * 100
+        avg_good = total_good / total_frames * 100
         avg_satisfactory = total_satisfactory / total_frames * 100
         avg_should_improve = total_should_improve / total_frames * 100
         sum_total = (sum_acc / 100) * 100
@@ -188,32 +189,44 @@ def process_video(video_path):
         res_acc_front_knee = evaluate_each_body(acc_front_knee_angle, (70, 100))
         res_acc_back_knee = evaluate_each_body(acc_back_knee_angle, (70, 100))
         res_acc_hip = evaluate_each_body(acc_front_hip_angle, (70, 100))
-        res_acc_each = evaluate_each_body(avg_angle_each_body, (70, 100))
+        res_acc_each = evaluate_each_body(avg_angle_each_body, (60, 100))
 
+        # Create summary data matching JavaScript expectations
         summary_data = {
             'cycleCount': total_gait_cycles,
+            'totalFrames': total_frames,
+
+            # Trunk metrics
             'trunkLeanValue': f'{round(total_trunk_lean, 2)}',
-            'trunkLeanPercentage': f'{round(acc_trunk_lean,2)} %',
+            'trunkLeanPercentage': f'{round(acc_trunk_lean, 2)} %',
             'trunkLeanRes': res_acc_trunk,
-            'frontKneeValue': total_front_knee_angle,
-            'frontKneePercentage': f'{round(acc_front_knee_angle,2)} %',
+
+            # Front knee metrics
+            'frontKneeValue': f'{round(total_front_knee_angle, 2)}',
+            'frontKneePercentage': f'{round(acc_front_knee_angle, 2)} %',
             'frontKneeRes': res_acc_front_knee,
-            'backKneeValue': total_back_knee_angle,
-            'backKneePercentage': f'{round(acc_back_knee_angle,2)} %',
+
+            # Back knee metrics
+            'backKneeValue': f'{round(total_back_knee_angle, 2)}',
+            'backKneePercentage': f'{round(acc_back_knee_angle, 2)} %',
             'backKneeRes': res_acc_back_knee,
-            'hipValue': total_front_hip_angle,
-            'hipPercentage': f'{round(acc_front_hip_angle,2)} %',
+
+            # Hip metrics
+            'hipValue': f'{round(total_front_hip_angle, 2)}',
+            'hipPercentage': f'{round(acc_front_hip_angle, 2)} %',
             'hipRes': res_acc_hip,
 
+            # Angle metrics
             'angleScore': f'{round(avg_angle_each_body, 2)}',
             'angleRes': res_acc_each,
 
+            # Performance distribution - use exact keys expected by JS
             'GoodScore': total_good,
             'GoodPercentage': f'{round(avg_good, 2)}%',
             'SatisfactoryScore': total_satisfactory,
             'SatisfactoryPercentage': f'{round(avg_satisfactory, 2)}%',
-            'Should ImproveScore': total_should_improve,
-            'Should ImprovePercentage': f'{round(avg_should_improve, 2)}%',
+            'Should_ImproveScore': total_should_improve,  # Changed format to match JS
+            'Should_ImprovePercentage': f'{round(avg_should_improve, 2)}%'  # Changed format to match JS
         }
 
         # Write summary results to CSV
