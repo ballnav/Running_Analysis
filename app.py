@@ -1,7 +1,7 @@
 import os
 import csv
 from flask import Flask, request, render_template, jsonify
-from count import process_video  # Assuming 'count' is the correct module name
+from count6 import process_video  # Assuming 'count' is the correct module name
 
 app = Flask(__name__)
 
