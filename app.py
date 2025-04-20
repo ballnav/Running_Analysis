@@ -1,47 +1,60 @@
 import os
 import csv
 from flask import Flask, request, render_template, jsonify
-from count6 import process_video  # Assuming 'count' is the correct module name
+from werkzeug.utils import secure_filename
+
+from video_processing import process_video  # ← ใช้ชื่อโมดูลที่ถูกต้อง
 
 app = Flask(__name__)
 
+UPLOAD_FOLDER = 'uploads'
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+
 @app.route('/')
 def index():
-    return render_template('index13.html')
+    return render_template('index.html')  # ← เปลี่ยนชื่อไฟล์ HTML
+
 
 @app.route('/analyze', methods=['POST'])
 def analyze():
     try:
-        # Save the uploaded video file
         file = request.files['video']
-        video_path = 'uploaded_video.mp4'
+        if file.filename == '':
+            return jsonify({'error': 'No file selected'}), 400
+
+        filename = secure_filename(file.filename)
+        video_path = os.path.join(UPLOAD_FOLDER, filename)
         file.save(video_path)
 
-        # Process the video using the process_video function
-        process_video(video_path)
+        result = process_video(video_path)
 
-        # Read the contents of 'count2.csv'
+        if not result:
+            return jsonify({'error': 'Video processing failed'}), 500
+
         analysis_results = []
-        with open('count2.csv', mode='r') as count2_file:
-            count2_reader = csv.DictReader(count2_file)
-            for row in count2_reader:
+        with open(result['detailed_csv'], mode='r') as csv_file:
+            csv_reader = csv.DictReader(csv_file)
+            for row in csv_reader:
                 analysis_results.append(row)
 
-        # Read the contents of 'gait_summary.csv'
-        summary = []
-        with open('gait_summary.csv', mode='r') as gait_summary_file:
-            gait_summary_reader = csv.DictReader(gait_summary_file)
-            for row in gait_summary_reader:
-                summary.append(row)
+        summary_data = {}
+        try:
+            with open(result['summary_csv'], mode='r') as summary_file:
+                csv_reader = csv.DictReader(summary_file)
+                summary_data = next(csv_reader)
+        except (FileNotFoundError, StopIteration):
+            pass
 
-        # Return both sets of results as JSON
         return jsonify({
             'analysis_results': analysis_results,
-            'summary': summary
+            'summary_data': summary_data,
+            'output_video': result['output_video']
         })
 
     except Exception as e:
-        return jsonify({'error': str(e)}), 500  # Adjusted error code to 500 for server errors
+        return jsonify({'error': str(e)}), 500
+
 
 if __name__ == '__main__':
     app.run(debug=True)
