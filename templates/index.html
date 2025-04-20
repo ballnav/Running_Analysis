@@ -1,0 +1,856 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Running Analysis</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .drop-container {
+            border: 2px dashed #0d6efd;
+            border-radius: 8px;
+            padding: 30px;
+            text-align: center;
+            background-color: #f8f9fa;
+            transition: border 0.3s ease;
+            margin-bottom: 20px;
+        }
+
+        .drop-container:hover {
+            border-color: #0a58ca;
+            background-color: #e9ecef;
+        }
+
+        .drop-title {
+            font-size: 18px;
+            margin-bottom: 15px;
+            color: #6c757d;
+        }
+
+        #fileInput {
+            display: block;
+            width: 100%;
+            margin-bottom: 15px;
+        }
+
+        .floating-button {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background-color: #0d6efd;
+            color: white;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            z-index: 1000;
+            transition: all 0.3s ease;
+        }
+
+        .floating-button:hover {
+            background-color: #0a58ca;
+            transform: scale(1.1);
+        }
+
+        .table-responsive {
+            max-height: 600px;
+            overflow-y: auto;
+        }
+
+        .summary-card {
+            margin-top: 20px;
+            border-left: 5px solid #0d6efd;
+        }
+
+        .metric-card {
+            transition: transform 0.2s;
+        }
+
+        .metric-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .good-result {
+            color: #198754;
+            border-left: 4px solid #198754;
+        }
+
+        .satisfactory-result {
+            color: #fd7e14;
+            border-left: 4px solid #fd7e14;
+        }
+
+        .improve-result {
+            color: #dc3545;
+            border-left: 4px solid #dc3545;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 250px;
+            width: 100%;
+        }
+
+        .video-container {
+            margin: 20px 0;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        #videoPlayer {
+            width: 100%;
+            background-color: #000;
+        }
+
+        .loading-spinner {
+            display: none;
+            margin: 20px auto;
+            text-align: center;
+        }
+
+        .status-message {
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+
+        .processing-log {
+            max-height: 200px;
+            overflow-y: auto;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+            padding: 10px;
+            font-family: monospace;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container py-5">
+        <div class="row justify-content-center">
+            <div class="col-lg-10">
+                <div class="text-center mb-4">
+                    <h1 class="display-4">Running Analysis</h1>
+                    <hr class="my-4">
+                </div>
+
+                <div class="card shadow-sm">
+                    <div class="card-body">
+                        <form id="uploadForm" method="post" enctype="multipart/form-data" action="/analyze">
+                            <div class="drop-container" id="drop-container">
+                                <div class="drop-title" id="drop-title">Drag and drop files here or click to select files</div>
+                                <input type="file" class="form-control" id="fileInput" name="video" accept="video/*">
+                                <button type="submit" class="btn btn-primary">Analyze</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                                        <div class="loading-spinner" id="loadingSpinner">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <p class="mt-2">Processing video... This may take a few minutes.</p>
+                            <div class="processing-log" id="processingLog"></div>
+                        </div>
+                        <div class="status-message alert alert-info d-none" id="statusMessage"></div>
+                    </div>
+                </div>
+
+                <!-- Video Display Section -->
+                <div class="card shadow-sm mt-4 d-none" id="videoSection">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0">Analysis Video</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="video-container">
+                            <video id="videoPlayer" controls>
+                                Your browser does not support the video tag.
+                            </video>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card shadow-sm mt-4">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0">Analysis Results</h5>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive" id="results">
+                            <table class="table table-striped table-hover mb-0">
+                                <thead class="table-dark">
+                                    <tr>
+                                        <th>Frame</th>
+                                        <th>Running Cycle</th>
+                                        <th>Sub Phase</th>
+                                        <th>% Cycle</th>
+                                        <th>Trunk Lean</th>
+                                        <th>Front Knee Angle</th>
+                                        <th>Back Knee Angle</th>
+                                        <th>Front Hip Angle</th>
+                                        <th>Angle Each Body %</th>
+                                        <th>Result</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <!-- Results will be populated here -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Summary Section -->
+<!-- Replace your existing summary section with this enhanced version -->
+<div class="card shadow-sm mt-4 summary-card" id="summary-section">
+    <div class="card-header bg-primary text-white">
+        <h5 class="mb-0">Running Analysis Summary</h5>
+    </div>
+    <div class="card-body">
+        <!-- Overall Stats Row -->
+        <div class="row mb-4">
+            <div class="col-md-3 mb-3">
+                <div class="card h-100 shadow-sm metric-card" id="cycles-card">
+                    <div class="card-body text-center">
+                        <h6 class="card-subtitle mb-2 text-muted">Total Cycles</h6>
+                        <h2 class="card-title text-primary" id="cycle-count">-</h2>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 mb-3">
+                <div class="card h-100 shadow-sm metric-card" id="frames-card">
+                    <div class="card-body text-center">
+                        <h6 class="card-subtitle mb-2 text-muted">Total Frames</h6>
+                        <h2 class="card-title text-primary" id="frame-count">-</h2>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6 mb-3">
+                <div class="card h-100 shadow-sm metric-card" id="angle-card">
+                    <div class="card-body text-center">
+                        <h6 class="card-subtitle mb-2 text-muted">Overall Form Quality</h6>
+                        <h2 class="card-title" id="angle-score">-</h2>
+                        <p class="card-text" id="angle-result">-</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <!-- Body Metrics Column -->
+            <div class="col-md-6">
+                <h6 class="text-muted mb-3">Body Position Metrics</h6>
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <div class="card h-100 shadow-sm metric-card" id="trunk-card">
+                            <div class="card-body">
+                                <h6 class="card-subtitle mb-2 text-muted">Trunk Lean</h6>
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <h4 class="card-title mb-0" id="trunk-percentage">-</h4>
+                                        <small class="text-muted">Quality Score</small>
+                                    </div>
+                                    <div class="text-end">
+                                        <h4 class="card-title mb-0" id="trunk-value">-</h4>
+                                        <small class="text-muted">Total Value</small>
+                                    </div>
+                                </div>
+                                <p class="card-text mt-2" id="trunk-result">-</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <div class="card h-100 shadow-sm metric-card" id="hip-card">
+                            <div class="card-body">
+                                <h6 class="card-subtitle mb-2 text-muted">Hip Angle</h6>
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <h4 class="card-title mb-0" id="hip-percentage">-</h4>
+                                        <small class="text-muted">Quality Score</small>
+                                    </div>
+                                    <div class="text-end">
+                                        <h4 class="card-title mb-0" id="hip-value">-</h4>
+                                        <small class="text-muted">Total Value</small>
+                                    </div>
+                                </div>
+                                <p class="card-text mt-2" id="hip-result">-</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <div class="card h-100 shadow-sm metric-card" id="front-knee-card">
+                            <div class="card-body">
+                                <h6 class="card-subtitle mb-2 text-muted">Front Knee</h6>
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <h4 class="card-title mb-0" id="front-knee-percentage">-</h4>
+                                        <small class="text-muted">Quality Score</small>
+                                    </div>
+                                    <div class="text-end">
+                                        <h4 class="card-title mb-0" id="front-knee-value">-</h4>
+                                        <small class="text-muted">Total Value</small>
+                                    </div>
+                                </div>
+                                <p class="card-text mt-2" id="front-knee-result">-</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <div class="card h-100 shadow-sm metric-card" id="back-knee-card">
+                            <div class="card-body">
+                                <h6 class="card-subtitle mb-2 text-muted">Back Knee</h6>
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <h4 class="card-title mb-0" id="back-knee-percentage">-</h4>
+                                        <small class="text-muted">Quality Score</small>
+                                    </div>
+                                    <div class="text-end">
+                                        <h4 class="card-title mb-0" id="back-knee-value">-</h4>
+                                        <small class="text-muted">Total Value</small>
+                                    </div>
+                                </div>
+                                <p class="card-text mt-2" id="back-knee-result">-</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Performance Distribution Column -->
+            <div class="col-md-6">
+                <h6 class="text-muted mb-3">Performance Distribution</h6>
+                <div class="card shadow-sm h-100">
+                    <div class="card-body">
+                        <div class="chart-container">
+                            <canvas id="performanceChart"></canvas>
+                        </div>
+                        <div class="row mt-3">
+                            <div class="col-md-4 text-center">
+                                <div class="d-flex align-items-center justify-content-center">
+                                    <div style="width: 15px; height: 15px; background-color: #198754; margin-right: 5px;"></div>
+                                    <span>Good</span>
+                                </div>
+                                <div class="d-flex justify-content-center align-items-baseline mt-2">
+                                    <h4 id="good-percentage" class="mb-0 me-2">-</h4>
+                                    <small class="text-muted" id="good-count">(-)</small>
+                                </div>
+                            </div>
+                            <div class="col-md-4 text-center">
+                                <div class="d-flex align-items-center justify-content-center">
+                                    <div style="width: 15px; height: 15px; background-color: #fd7e14; margin-right: 5px;"></div>
+                                    <span>Satisfactory</span>
+                                </div>
+                                <div class="d-flex justify-content-center align-items-baseline mt-2">
+                                    <h4 id="satisfactory-percentage" class="mb-0 me-2">-</h4>
+                                    <small class="text-muted" id="satisfactory-count">(-)</small>
+                                </div>
+                            </div>
+                            <div class="col-md-4 text-center">
+                                <div class="d-flex align-items-center justify-content-center">
+                                    <div style="width: 15px; height: 15px; background-color: #dc3545; margin-right: 5px;"></div>
+                                    <span>ฺBad</span>
+                                </div>
+                                <div class="d-flex justify-content-center align-items-baseline mt-2">
+                                    <h4 id="improve-percentage" class="mb-0 me-2">-</h4>
+                                    <small class="text-muted" id="improve-count">(-)</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Performance Ranking Section -->
+        <div class="row mt-4">
+            <div class="col-12">
+                <h6 class="text-muted mb-3">Performance Ranking</h6>
+                <div class="card shadow-sm">
+                    <div class="card-body">
+                        <div id="ranked-results">
+                            <!-- Ranked results will be populated here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <button class="floating-button" onclick="toggleScroll()" id="scrollButton">↓</button>
+
+    <!-- Bootstrap JS Bundle with Popper -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+
+                // Global variables for chart
+        let performanceChart = null;
+        let isScrollingDown = true;
+
+        // Initialize the page
+        document.addEventListener('DOMContentLoaded', function() {
+            // Set up drag and drop functionality
+            const dropContainer = document.getElementById('drop-container');
+            const fileInput = document.getElementById('fileInput');
+
+            // Drag & drop events
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                dropContainer.addEventListener(eventName, preventDefaults, false);
+            });
+
+            function preventDefaults(e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+
+            ['dragenter', 'dragover'].forEach(eventName => {
+                dropContainer.addEventListener(eventName, highlight, false);
+            });
+
+            ['dragleave', 'drop'].forEach(eventName => {
+                dropContainer.addEventListener(eventName, unhighlight, false);
+            });
+
+            function highlight() {
+                dropContainer.classList.add('bg-light');
+            }
+
+            function unhighlight() {
+                dropContainer.classList.remove('bg-light');
+            }
+
+            dropContainer.addEventListener('drop', handleDrop, false);
+
+            function handleDrop(e) {
+                const dt = e.dataTransfer;
+                const files = dt.files;
+                fileInput.files = files;
+            }
+
+            // Handle form submission
+            document.getElementById('uploadForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+
+                const fileInput = document.getElementById('fileInput');
+                if (fileInput.files.length === 0) {
+                    showStatus('Please select a video file to analyze.', 'warning');
+                    return;
+                }
+
+                // Show loading spinner and hide sections
+                document.getElementById('loadingSpinner').style.display = 'block';
+                document.getElementById('videoSection').classList.add('d-none');
+                document.getElementById('resultsSection').classList.add('d-none');
+                document.getElementById('summarySection').classList.add('d-none');
+                document.getElementById('analyzeBtn').disabled = true;
+
+                // Clear previous logs
+                document.getElementById('processingLog').innerHTML = '';
+
+                // Initialize FormData
+                const formData = new FormData();
+                formData.append('video', fileInput.files[0]);
+
+                // Log initial status
+                logProcessingStep('Uploading video for analysis...');
+
+                // Simulate API call to backend Python processing
+                // In a real implementation, this would be an actual AJAX call to your server
+                simulateVideoProcessing(formData);
+            });
+        });
+
+        function simulateVideoProcessing(formData) {
+            // Log processing steps with simulated delay
+            setTimeout(() => logProcessingStep('Video received. Starting pose detection...'), 1000);
+            setTimeout(() => logProcessingStep('Analyzing running gait cycles...'), 3000);
+            setTimeout(() => logProcessingStep('Calculating biomechanical metrics...'), 5000);
+            setTimeout(() => logProcessingStep('Generating performance analysis...'), 7000);
+
+            // After "processing", load mock data and display results
+            setTimeout(() => {
+                // Mock summary data based on your Python script output
+                const summaryData = {
+                    cycleCount: 8,
+                    totalFrames: 240,
+                    trunkLeanValue: '185.6',
+                    trunkLeanPercentage: '77.4 %',
+                    trunkLeanRes: 'Good',
+                    frontKneeValue: '176.2',
+                    frontKneePercentage: '73.4 %',
+                    frontKneeRes: 'Good',
+                    backKneeValue: '168.5',
+                    backKneePercentage: '70.2 %',
+                    backKneeRes: 'Satisfactory',
+                    hipValue: '172.8',
+                    hipPercentage: '72.0 %',
+                    hipRes: 'Good',
+                    angleScore: '73.25',
+                    angleRes: 'Good',
+                    GoodScore: 168,
+                    GoodPercentage: '70.0%',
+                    SatisfactoryScore: 52,
+                    SatisfactoryPercentage: '21.7%',
+                    Should_ImproveScore: 20,
+                    Should_ImprovePercentage: '8.3%'
+                };
+
+                // Mock detailed data for table (just a few rows)
+                const detailedData = [
+                    {Frame: 1, RunningGaitCycle: 1, SubPhase: 'Initial Contact', CyclePercent: '14.28%', TrunkLean: '15.32 (Good)', FrontKneeAngle: '38.5 (Good)', BackKneeAngle: '45.6 (Good)', FrontHipAngle: '60.2 (Good)', AngleEachBody: '75.5 %', Result: 'Good'},
+                    {Frame: 2, RunningGaitCycle: 1, SubPhase: 'Initial Contact', CyclePercent: '14.28%', TrunkLean: '16.24 (Good)', FrontKneeAngle: '37.8 (Good)', BackKneeAngle: '47.1 (Good)', FrontHipAngle: '61.5 (Good)', AngleEachBody: '74.8 %', Result: 'Good'},
+                    {Frame: 3, RunningGaitCycle: 1, SubPhase: 'Midstance', CyclePercent: '14.28%', TrunkLean: '17.05 (Good)', FrontKneeAngle: '40.2 (Good)', BackKneeAngle: '48.3 (Good)', FrontHipAngle: '59.8 (Good)', AngleEachBody: '73.9 %', Result: 'Good'},
+                    {Frame: 4, RunningGaitCycle: 1, SubPhase: 'Midstance', CyclePercent: '14.28%', TrunkLean: '18.12 (Good)', FrontKneeAngle: '42.7 (Good)', BackKneeAngle: '50.2 (Satisfactory)', FrontHipAngle: '58.4 (Good)', AngleEachBody: '71.2 %', Result: 'Good'},
+                    {Frame: 5, RunningGaitCycle: 1, SubPhase: 'Terminal Stance', CyclePercent: '14.28%', TrunkLean: '19.45 (Good)', FrontKneeAngle: '45.1 (Good)', BackKneeAngle: '52.8 (Satisfactory)', FrontHipAngle: '57.5 (Satisfactory)', AngleEachBody: '69.8 %', Result: 'Satisfactory'}
+                ];
+
+                // Done loading
+                document.getElementById('loadingSpinner').style.display = 'none';
+                document.getElementById('analyzeBtn').disabled = false;
+                logProcessingStep('Analysis complete!');
+
+                // Display processed video
+                displayProcessedVideo();
+
+                // Update UI with mock data
+                updateDetailedResults(detailedData);
+                updateSummaryData(summaryData);
+
+                // Show all sections
+                document.getElementById('videoSection').classList.remove('d-none');
+                document.getElementById('resultsSection').classList.remove('d-none');
+                document.getElementById('summarySection').classList.remove('d-none');
+
+                showStatus('Video analysis completed successfully!', 'success');
+            }, 10000);
+        }
+
+        function displayProcessedVideo() {
+            // In a real implementation, this would be the URL to your processed video
+            // For now, we'll use a placeholder video or the original
+            const videoPlayer = document.getElementById('videoPlayer');
+
+            // Option 1: Use original input video for demo
+            const fileInput = document.getElementById('fileInput');
+            if (fileInput.files && fileInput.files[0]) {
+                videoPlayer.src = URL.createObjectURL(fileInput.files[0]);
+            }
+            // Option 2: Use a placeholder video URL
+            // videoPlayer.src = "https://example.com/path/to/analyzed_video.mp4";
+
+            videoPlayer.load();
+        }
+
+        // Initialize chart with empty data
+        let performanceChart;
+
+        function initChart() {
+            const ctx = document.getElementById('performanceChart').getContext('2d');
+            performanceChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Good', 'Satisfactory', 'Should Improve'],
+                    datasets: [{
+                        data: [0, 0, 0],
+                        backgroundColor: ['#198754', '#fd7e14', '#dc3545'],
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '70%',
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    }
+                }
+            });
+        }
+
+        // Initialize chart when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            initChart();
+        });
+
+        // Update summary cards based on class of result
+        function updateCardStyle(elementId, result) {
+            const element = document.getElementById(elementId);
+            if (element) {
+                // Reset all classes first
+                element.classList.remove('good-result', 'satisfactory-result', 'improve-result');
+
+                // Add appropriate class based on result
+                if (result === 'Good') {
+                    element.classList.add('good-result');
+                } else if (result === 'Satisfactory') {
+                    element.classList.add('satisfactory-result');
+                } else if (result === 'Should Improve') {
+                    element.classList.add('improve-result');
+                }
+            }
+        }
+
+    // Improved updateSummary function
+    function updateSummary(summaryData) {
+        // Basic stats
+        document.getElementById('cycle-count').textContent = summaryData.cycleCount;
+
+        // Add total frames count (this should be added to your Python export)
+        const totalFrames = parseInt(summaryData.totalFrames) || calculateTotalFrames();
+        document.getElementById('frame-count').textContent = totalFrames;
+
+        // Update angle score
+        document.getElementById('angle-score').textContent = summaryData.angleScore;
+        document.getElementById('angle-result').textContent = summaryData.angleRes;
+        updateCardStyle('angle-card', summaryData.angleRes);
+
+        // Update trunk metrics with totals
+        document.getElementById('trunk-percentage').textContent = summaryData.trunkLeanPercentage;
+        document.getElementById('trunk-value').textContent = summaryData.trunkLeanValue;
+        document.getElementById('trunk-result').textContent = summaryData.trunkLeanRes;
+        updateCardStyle('trunk-card', summaryData.trunkLeanRes);
+
+        // Update hip metrics with totals
+        document.getElementById('hip-percentage').textContent = summaryData.hipPercentage;
+        document.getElementById('hip-value').textContent = summaryData.hipValue;
+        document.getElementById('hip-result').textContent = summaryData.hipRes;
+        updateCardStyle('hip-card', summaryData.hipRes);
+
+        // Update front knee metrics with totals
+        document.getElementById('front-knee-percentage').textContent = summaryData.frontKneePercentage;
+        document.getElementById('front-knee-value').textContent = summaryData.frontKneeValue;
+        document.getElementById('front-knee-result').textContent = summaryData.frontKneeRes;
+        updateCardStyle('front-knee-card', summaryData.frontKneeRes);
+
+        // Update back knee metrics with totals
+        document.getElementById('back-knee-percentage').textContent = summaryData.backKneePercentage;
+        document.getElementById('back-knee-value').textContent = summaryData.backKneeValue;
+        document.getElementById('back-knee-result').textContent = summaryData.backKneeRes;
+        updateCardStyle('back-knee-card', summaryData.backKneeRes);
+
+        // Update performance distribution percentages and counts
+        const goodPercentage = parseFloat(summaryData.GoodPercentage);
+        const satisfactoryPercentage = parseFloat(summaryData.SatisfactoryPercentage);
+        const improvePercentage = parseFloat(summaryData.Should_ImprovePercentage || summaryData['Should ImprovePercentage']);
+
+        document.getElementById('good-percentage').textContent = summaryData.GoodPercentage;
+        document.getElementById('good-count').textContent = `(${summaryData.GoodScore})`;
+
+        document.getElementById('satisfactory-percentage').textContent = summaryData.SatisfactoryPercentage;
+        document.getElementById('satisfactory-count').textContent = `(${summaryData.SatisfactoryScore})`;
+
+        document.getElementById('improve-percentage').textContent = summaryData.Should_ImprovePercentage || summaryData['Should ImprovePercentage'];
+        document.getElementById('improve-count').textContent = `(${summaryData.Should_ImproveScore || summaryData['Should ImproveScore']})`;
+
+        // Update chart data
+        performanceChart.data.datasets[0].data = [
+            goodPercentage,
+            satisfactoryPercentage,
+            improvePercentage
+        ];
+        performanceChart.update();
+
+        // Display ranked results
+        displayRankedResults(summaryData);
+    }
+
+    // Function to calculate total frames if not provided directly
+    function calculateTotalFrames() {
+        // Try to count rows in the result table
+        const resultsRows = document.querySelectorAll('#results tbody tr');
+        return resultsRows.length;
+    }
+
+    // Enhanced function to display ranked results
+    function displayRankedResults(summaryData) {
+        const container = document.getElementById('ranked-results');
+        container.innerHTML = '';
+
+        // Create an array of result categories with their values
+        const resultCategories = [
+            { name: 'Good', count: parseInt(summaryData.GoodScore), percentage: summaryData.GoodPercentage },
+            { name: 'Satisfactory', count: parseInt(summaryData.SatisfactoryScore), percentage: summaryData.SatisfactoryPercentage },
+            { name: 'Should Improve', count: parseInt(summaryData.Should_ImproveScore || summaryData['Should ImproveScore']),
+            percentage: summaryData.Should_ImprovePercentage || summaryData['Should ImprovePercentage'] }
+        ];
+
+        // Sort the categories by count (descending)
+        resultCategories.sort((a, b) => b.count - a.count);
+
+        // Get total frames
+        const totalFrames = resultCategories.reduce((sum, category) => sum + category.count, 0);
+
+        // Create header with total
+        container.innerHTML = `
+            <div class="d-flex justify-content-between mb-3">
+                <h6 class="fw-bold">Most Common Performance Categories</h6>
+                <span class="text-muted">Total Frames: ${totalFrames}</span>
+            </div>
+        `;
+
+        // Create and append progress bars for each category
+        resultCategories.forEach((category, index) => {
+            // Determine the color class based on category name
+            let colorClass = '';
+            let textClass = '';
+            if (category.name === 'Good') {
+                colorClass = 'bg-success';
+                textClass = 'text-success';
+            } else if (category.name === 'Satisfactory') {
+                colorClass = 'bg-warning';
+                textClass = 'text-warning';
+            } else {
+                colorClass = 'bg-danger';
+                textClass = 'text-danger';
+            }
+
+            // Create ranking indicator with medal emoji
+            let rankLabel = '';
+            if (index === 0) {
+                rankLabel = '🥇';
+            } else if (index === 1) {
+                rankLabel = '🥈';
+            } else {
+                rankLabel = '🥉';
+            }
+
+            // Calculate width percentage for progress bar (based on total frames)
+            const widthPercentage = (category.count / totalFrames) * 100;
+
+            // Create HTML for the ranked item
+            const rankItem = `
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <div class="d-flex align-items-center">
+                            <span class="me-2 fs-4">${rankLabel}</span>
+                            <span class="fw-bold ${textClass}">${category.name}</span>
+                        </div>
+                        <div>
+                            <strong>${category.count}</strong> frames
+                            <span class="ms-2 badge ${colorClass}">${category.percentage}</span>
+                        </div>
+                    </div>
+                    <div class="progress" style="height: 25px;">
+                        <div class="progress-bar ${colorClass}" role="progressbar"
+                            style="width: ${widthPercentage}%"
+                            aria-valuenow="${category.count}"
+                            aria-valuemin="0"
+                            aria-valuemax="${totalFrames}">
+                            ${widthPercentage.toFixed(1)}%
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            container.innerHTML += rankItem;
+        });
+    }
+
+        document.getElementById('uploadForm').addEventListener('submit', function(event) {
+            event.preventDefault();
+            const formData = new FormData(this);
+
+            fetch('/analyze', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                const resultsContainer = document.querySelector('#results tbody');
+                resultsContainer.innerHTML = '';
+
+                if ('analysis_results' in data) {
+                    const results = data['analysis_results'];
+                    results.forEach(result => {
+                        const row = `
+                            <tr>
+                                <td>${result['Frame']}</td>
+                                <td>${result['Running Gait Cycle']}</td>
+                                <td>${result['Sub Phase']}</td>
+                                <td>${result['% Cycle']}</td>
+                                <td>${result['Trunk Lean']}</td>
+                                <td>${result['Front Knee Angle']}</td>
+                                <td>${result['Back Knee Angle']}</td>
+                                <td>${result['Front Hip Angle']}</td>
+                                <td>${result['Angle Each Body %']}</td>
+                                <td>${result['Result']}</td>
+                            </tr>`;
+                        resultsContainer.innerHTML += row;
+                    });
+
+                    // If summary data is available, update the summary section
+                    if ('summary_data' in data) {
+                        updateSummary(data.summary_data);
+
+                        // Make summary section visible
+                        document.getElementById('summary-section').style.display = 'block';
+                    } else {
+                        // If no summary data, hide summary section
+                        document.getElementById('summary-section').style.display = 'none';
+                    }
+                } else if ('error' in data) {
+                    console.error('Error:', data['error']);
+                    // Display error message to user
+                    resultsContainer.innerHTML = `<tr><td colspan="10" class="text-danger text-center py-3">Error: ${data['error']}</td></tr>`;
+
+                    // Hide summary section on error
+                    document.getElementById('summary-section').style.display = 'none';
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                const resultsContainer = document.querySelector('#results tbody');
+                resultsContainer.innerHTML = `<tr><td colspan="10" class="text-danger text-center py-3">Error: Could not process request</td></tr>`;
+
+                // Hide summary section on error
+                document.getElementById('summary-section').style.display = 'none';
+            });
+        });
+
+        function toggleScroll() {
+            const scrollButton = document.getElementById('scrollButton');
+            if (window.scrollY + window.innerHeight >= document.body.scrollHeight) {
+                // If at bottom, scroll to top
+                window.scrollTo({
+                    top: 0,
+                    behavior: 'smooth'
+                });
+                scrollButton.innerHTML = '↓'; // Change button icon to down arrow
+            } else {
+                // If not at bottom, scroll to bottom
+                window.scrollTo({
+                    top: document.body.scrollHeight,
+                    behavior: 'smooth'
+                });
+                scrollButton.innerHTML = '↑'; // Change button icon to up arrow
+            }
+        }
+
+        // Update button icon on scroll
+        // window.addEventListener('scroll', function() {
+        //     const scrollButton = document.getElementById('scrollButton');
+        //     if (window.scrollY + window.innerHeight >= document.body.scrollHeight) {
+        //         scrollButton.innerHTML = '↑';
+        //     } else {
+        //         scrollButton.innerHTML = '↓';
+        //     }
+        // });
+    </script>
+</body>
+</html>
